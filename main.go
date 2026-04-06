@@ -303,11 +303,16 @@ func mergeTags(data map[string][]geosite.Item) {
 
 func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string) error {
 	var (
-		vData []byte
-		err   error
+	    vData []byte
+	    err   error
 	)
-
-	vData, err := download(release)
+	localPath := os.Getenv("LOCAL_GEOSITE_PATH")
+	if localPath != "" {
+	    vData, err = readLocal(localPath)
+	} else {
+	    vData, err = download(release)
+	}
+	
 	if err != nil {
 		return err
 	}
@@ -363,9 +368,6 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 	if err = os.MkdirAll(ruleSetUnstableOutput, 0o755); err != nil {
 	    return err
 	}
-	if err != nil {
-		return err
-	}
 	for code, domains := range domainMap {
 		var headlessRule option.DefaultHeadlessRule
 		defaultRule := geosite.Compile(domains)
@@ -414,16 +416,15 @@ func setActionOutput(name string, content string) {
 
 func release(source string, destination string, output string, cnOutput string, ruleSetOutput string, ruleSetOutputUnstable string) error {
 	localPath := os.Getenv("LOCAL_GEOSITE_PATH")
-    if localPath != "" {
-        log.Info("use local geosite: ", localPath)
-
-        vData, err := readLocal(localPath)
-        if err != nil {
-            return err
-        }
-
-        return generateFromData(vData, output, cnOutput, ruleSetOutput, ruleSetOutputUnstable)
-    }
+	if localPath != "" {
+	    log.Info("LOCAL_GEOSITE_PATH is set, skip GitHub fetch and use local file: ", localPath)
+	    err := generate(nil, output, cnOutput, ruleSetOutput, ruleSetOutputUnstable)
+	    if err != nil {
+	        return err
+	    }
+	    setActionOutput("tag", "local")
+	    return nil
+	}
 
 	sourceRelease, err := fetch(source)
 	if err != nil {
