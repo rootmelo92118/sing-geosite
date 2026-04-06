@@ -86,6 +86,12 @@ func download(release *github.RepositoryRelease) ([]byte, error) {
 	return data, nil
 }
 
+func readLocal(path string) ([]byte, error) {
+	absPath, _ := filepath.Abs(path)
+	log.Info("read local geosite file: ", absPath)
+	return os.ReadFile(path)
+}
+
 func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 	vGeositeList := routercommon.GeoSiteList{}
 	err := proto.Unmarshal(vGeositeData, &vGeositeList)
@@ -296,10 +302,21 @@ func mergeTags(data map[string][]geosite.Item) {
 }
 
 func generate(release *github.RepositoryRelease, output string, cnOutput string, ruleSetOutput string, ruleSetUnstableOutput string) error {
-	vData, err := download(release)
+	var (
+	    vData []byte
+	    err   error
+	)
+	localPath := os.Getenv("LOCAL_GEOSITE_PATH")
+	if localPath != "" {
+	    vData, err = readLocal(localPath)
+	} else {
+	    vData, err = download(release)
+	}
+	
 	if err != nil {
 		return err
 	}
+
 	domainMap, err := parse(vData)
 	if err != nil {
 		return err
@@ -345,10 +362,11 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 	}
 	os.RemoveAll(ruleSetOutput)
 	os.RemoveAll(ruleSetUnstableOutput)
-	err = os.MkdirAll(ruleSetOutput, 0o755)
-	err = os.MkdirAll(ruleSetUnstableOutput, 0o755)
-	if err != nil {
-		return err
+	if err = os.MkdirAll(ruleSetOutput, 0o755); err != nil {
+	    return err
+	}
+	if err = os.MkdirAll(ruleSetUnstableOutput, 0o755); err != nil {
+	    return err
 	}
 	for code, domains := range domainMap {
 		var headlessRule option.DefaultHeadlessRule
@@ -366,7 +384,6 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 		}
 		srsPath, _ := filepath.Abs(filepath.Join(ruleSetOutput, "geosite-"+code+".srs"))
 		unstableSRSPath, _ := filepath.Abs(filepath.Join(ruleSetUnstableOutput, "geosite-"+code+".srs"))
-		// os.Stderr.WriteString("write " + srsPath + "\n")
 		var (
 			outputRuleSet         *os.File
 			outputRuleSetUnstable *os.File
@@ -398,6 +415,17 @@ func setActionOutput(name string, content string) {
 }
 
 func release(source string, destination string, output string, cnOutput string, ruleSetOutput string, ruleSetOutputUnstable string) error {
+	localPath := os.Getenv("LOCAL_GEOSITE_PATH")
+	if localPath != "" {
+	    log.Info("LOCAL_GEOSITE_PATH is set, skip GitHub fetch and use local file: ", localPath)
+	    err := generate(nil, output, cnOutput, ruleSetOutput, ruleSetOutputUnstable)
+	    if err != nil {
+	        return err
+	    }
+	    setActionOutput("tag", "local")
+	    return nil
+	}
+
 	sourceRelease, err := fetch(source)
 	if err != nil {
 		return err
