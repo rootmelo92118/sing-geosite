@@ -311,6 +311,9 @@ func generate(release *github.RepositoryRelease, output string, cnOutput string,
 	if localPath != "" {
 		vData, err = readLocal(localPath)
 	} else {
+		if release == nil {
+			return E.New("release is nil and LOCAL_GEOSITE_PATH is not set")
+		}
 		vData, err = download(release)
 	}
 	if err != nil {
@@ -414,6 +417,17 @@ func setActionOutput(name string, content string) {
 }
 
 func release(source string, destination string, output string, cnOutput string, ruleSetOutput string, ruleSetOutputUnstable string) error {
+	localPath := os.Getenv("LOCAL_GEOSITE_PATH")
+	if localPath != "" {
+		log.Info("LOCAL_GEOSITE_PATH is set, skip GitHub fetch and use local file: ", localPath)
+		err := generate(nil, output, cnOutput, ruleSetOutput, ruleSetOutputUnstable)
+		if err != nil {
+			return err
+		}
+		setActionOutput("tag", "local")
+		return nil
+	}
+
 	sourceRelease, err := fetch(source)
 	if err != nil {
 		return err
