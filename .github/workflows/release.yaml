@@ -16,8 +16,15 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ^1.22
+      - name: Download geosite.dat
+        run: |
+          mkdir -p assets
+          curl -L "https://github.com/rootmelo92118/v2ray-rules-dat/releases/latest/download/geosite.dat" -o assets/geosite.dat
+          ls -lh assets/geosite.dat
       - name: Build geosite
         id: build
+        env:
+          LOCAL_GEOSITE_PATH: assets/geosite.dat
         run: |
           go run -v .
       - name: Release rule sets
